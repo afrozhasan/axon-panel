@@ -1,0 +1,81 @@
+name: Release Engineering & Distribution
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Prepare & Publish Release Assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Validate Release Version Tag (SemVer)
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          echo "Validating tag: ${VERSION}"
+          if [[ ! "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Tag '${VERSION}' does not adhere to Semantic Versioning (vMAJOR.MINOR.PATCH)."
+            exit 1
+          fi
+          echo "RELEASE_VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Pre-Release Tests
+        run: npm test
+
+      - name: Build Production Frontend
+        run: npm run build
+
+      - name: Package Distribution Archives
+        run: |
+          VERSION="${RELEASE_VERSION}"
+          PKG_NAME="axon-panel-${VERSION}"
+          DIST_DIR="/tmp/${PKG_NAME}"
+          mkdir -p "${DIST_DIR}"
+
+          # Stage release files (include server, compiled dist, package.json, scripts, installer, docs)
+          rsync -av \
+            --exclude 'node_modules' \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'web/src' \
+            --exclude '*.db*' \
+            --exclude '*.log' \
+            --exclude 'backups' \
+            --exclude '.env*' \
+            ./ "${DIST_DIR}/"
+
+          # Create compressed archives
+          cd /tmp
+          tar -czf "${PKG_NAME}.tar.gz" "${PKG_NAME}"
+          zip -rq "${PKG_NAME}.zip" "${PKG_NAME}"
+
+          # Compute SHA-256 Checksums
+          sha256sum "${PKG_NAME}.tar.gz" "${PKG_NAME}.zip" > SHA256SUMS
+
+          # Move assets into workspace
+          mv "${PKG_NAME}.tar.gz" "${PKG_NAME}.zip" SHA256SUMS "${GITHUB_WORKSPACE}/"
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            install.sh
+            axon-panel-${{ env.RELEASE_VERSION }}.tar.gz
+            axon-panel-${{ env.RELEASE_VERSION }}.zip
+            SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

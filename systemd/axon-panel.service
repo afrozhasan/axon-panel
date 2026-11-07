@@ -1,0 +1,36 @@
+[Unit]
+Description=Axon Panel - High-Performance Linux Hosting Control Panel
+Documentation=https://github.com/afrozhasan/axon-panel
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=__PANEL_DIR__
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=20
+
+# The panel executes systemctl, nginx, and certbot via child_process.execFile with an explicit
+# allowlist and zero shell interpolation. Application-level controls are the security boundary.
+PrivateTmp=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LimitNOFILE=65535
+
+Environment=NODE_ENV=production
+Environment=PANEL_DOMAIN=__PANEL_DOMAIN__
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=axon-panel
+
+[Install]
+WantedBy=multi-user.target

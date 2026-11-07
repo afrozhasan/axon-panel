@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+:root,
+[data-theme="dark"] {
+  --axon-bg: #090E17;
+  --axon-sidebar: #060A12;
+  --axon-card: #0F172A;
+  --axon-card-hover: #162036;
+  --axon-border: #1E293B;
+  --axon-primary: #3B82F6;
+  --axon-primary-hover: #2563EB;
+  --axon-primary-fg: #FFFFFF;
+  --axon-secondary: #6366F1;
+  --axon-success: #10B981;
+  --axon-warning: #F59E0B;
+  --axon-danger: #EF4444;
+  --axon-text: #F8FAFC;
+  --axon-muted: #94A3B8;
+  --axon-input-bg: #0A0F1D;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --axon-bg: #F8FAFC;
+  --axon-sidebar: #FFFFFF;
+  --axon-card: #FFFFFF;
+  --axon-card-hover: #F1F5F9;
+  --axon-border: #E2E8F0;
+  --axon-primary: #2563EB;
+  --axon-primary-hover: #1D4ED8;
+  --axon-primary-fg: #FFFFFF;
+  --axon-secondary: #4F46E5;
+  --axon-success: #059669;
+  --axon-warning: #D97706;
+  --axon-danger: #DC2626;
+  --axon-text: #0F172A;
+  --axon-muted: #64748B;
+  --axon-input-bg: #FFFFFF;
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--axon-bg);
+  color: var(--axon-text);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--axon-border);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--axon-muted);
+}
+
+@layer utilities {
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .card {
+    background-color: var(--axon-card);
+    border: 1px solid var(--axon-border);
+    border-radius: 0.875rem;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+    transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+  }
+  .field {
+    width: 100%;
+    background-color: var(--axon-input-bg);
+    color: var(--axon-text);
+    border: 1px solid var(--axon-border);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+  }
+  .field:focus {
+    border-color: var(--axon-primary);
+    box-shadow: 0 0 0 3px rgb(59 130 246 / 0.2);
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    border-radius: 0.5rem;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 120ms ease;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background-color: var(--axon-primary);
+    color: var(--axon-primary-fg);
+    font-weight: 600;
+    box-shadow: 0 1px 2px 0 rgb(37 99 235 / 0.2);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--axon-primary-hover);
+  }
+  .btn-ghost {
+    background-color: var(--axon-card);
+    border-color: var(--axon-border);
+    color: var(--axon-text);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background-color: var(--axon-card-hover);
+    border-color: var(--axon-muted);
+  }
+  .btn-danger {
+    background-color: var(--axon-danger);
+    color: #ffffff;
+    font-weight: 500;
+  }
+  .btn-danger:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+  .th {
+    text-align: left;
+    font-size: 0.6875rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--axon-muted);
+    font-weight: 600;
+    padding: 0.65rem 0.85rem;
+    border-bottom: 1px solid var(--axon-border);
+    background-color: var(--axon-card);
+    white-space: nowrap;
+  }
+  .td {
+    padding: 0.65rem 0.85rem;
+    font-size: 0.8125rem;
+    border-bottom: 1px solid var(--axon-border);
+    vertical-align: middle;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

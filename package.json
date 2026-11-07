@@ -1,0 +1,62 @@
+{
+  "name": "axon-panel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Axon Panel — Ultra-lightweight, high-performance Linux hosting control panel",
+  "author": "Axon Panel Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/afrozhasan/axon-panel.git"
+  },
+  "keywords": [
+    "control-panel",
+    "vps-manager",
+    "hosting",
+    "nginx",
+    "wordpress-toolkit",
+    "mariadb",
+    "php-fpm",
+    "astro",
+    "telegram-alerts",
+    "slack-alerts"
+  ],
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "build": "vite build --config web/vite.config.ts",
+    "dev:web": "vite --config web/vite.config.ts",
+    "test": "node scripts/security-check.js && node scripts/api-contract-check.js && node scripts/test-api-roles.js && node scripts/test-configurable-roles.js && node scripts/test-multitenancy.js && node scripts/test-wordpress-toolkit-pro.js",
+    "check": "node scripts/security-check.js",
+    "alerts:check": "node server/scripts/alert-monitor.js --check",
+    "alerts:report": "node server/scripts/alert-monitor.js --report"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "better-sqlite3": "^13.0.3",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "qrcode": "^1.5.4",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.4",
+    "tailwindcss": "^4.1.14",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9"
+  }
+}

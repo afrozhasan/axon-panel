@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [20.x, 22.x]
+        node-version: [22.x]
     env:
       AXONPANEL_CONFIG_DIR: /tmp/axon-panel-ci
       AXONPANEL_LOG_DIR: /tmp/axon-panel-ci/logs

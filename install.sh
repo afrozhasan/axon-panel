@@ -205,14 +205,14 @@ else
   ok "Nginx web server is already installed."
 fi
 
-# Ensure Node.js 20+ is installed
+# Ensure Node.js 22+ is installed
 NODE_NEEDS_INSTALL=0
 if ! command -v node >/dev/null 2>&1; then
   NODE_NEEDS_INSTALL=1
 else
   NODE_MAJOR=$(node -v | tr -d 'v' | cut -d'.' -f1)
-  if [[ "$NODE_MAJOR" -lt 20 ]]; then
-    info "Installed Node.js is v${NODE_MAJOR}. Axon Panel requires Node.js 20 or higher."
+  if [[ "$NODE_MAJOR" -lt 22 ]]; then
+    info "Installed Node.js is v${NODE_MAJOR}. Axon Panel requires Node.js 22 or higher."
     NODE_NEEDS_INSTALL=1
   fi
 fi

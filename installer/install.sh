@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Axon Panel — Automated Standalone System Installer
-# High-Performance Linux Hosting Control Panel
+# Axon Panel by AxonWP (https://axonwp.com) — Developed by Afroz Hasan (https://afroz.me)
 #
 # GitHub: https://github.com/afrozhasan/axon-panel
 # Supported OS: Ubuntu 22.04 LTS, Ubuntu 24.04 LTS, Debian 11 / 12
@@ -96,7 +96,7 @@ cat <<'EOF'
 /_/  |_/_/|_|\____/_/ /_/      /_/    \__,_/_/ /_/\___/_/   
 EOF
 printf '%b\n' "$NC"
-printf '  %bHigh-Performance Linux Hosting Control Panel — Installer%b\n\n' "$BOLD" "$NC"
+printf '  %bAxon Panel by AxonWP (https://axonwp.com) — Developed by Afroz Hasan (https://afroz.me)%b\n\n' "$BOLD" "$NC"
 
 [[ $EUID -eq 0 ]] || fail "This installer must be run as root. Run: sudo bash install.sh"
 
@@ -754,6 +754,7 @@ fi
 printf '\n%b' "$GREEN"
 echo "────────────────────────────────────────────────────────────────────────────"
 echo "  🎉 Axon Panel v${INSTALLED_VER} has been successfully installed!"
+echo "     By AxonWP (https://axonwp.com) • Developed by Afroz Hasan (https://afroz.me)"
 echo "────────────────────────────────────────────────────────────────────────────"
 printf '%b' "$NC"
 

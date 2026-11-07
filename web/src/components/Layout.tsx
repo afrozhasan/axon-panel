@@ -340,6 +340,15 @@ export default function Layout({ children, onLogout }: { children: ReactNode; on
               <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
+          <a
+            href="https://axonwp.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[9px] font-bold text-[var(--axon-muted)] hover:text-[var(--axon-primary)] tracking-widest uppercase transition"
+            title="Axon Panel by AxonWP (developed by Afroz Hasan)"
+          >
+            AWP
+          </a>
         </div>
       );
     }
@@ -409,6 +418,16 @@ export default function Layout({ children, onLogout }: { children: ReactNode; on
           >
             Sign out
           </button>
+        </div>
+
+        <div className="pt-2 border-t border-[var(--axon-border)]/50 text-[10px] text-[var(--axon-muted)] leading-tight text-center">
+          <p>
+            <a href="https://axonwp.com" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--axon-primary)] transition font-medium">Axon Panel</a> by{" "}
+            <a href="https://axonwp.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--axon-text)] hover:text-[var(--axon-primary)] transition">AxonWP</a>
+          </p>
+          <p className="mt-0.5 text-[9px] opacity-80">
+            Developed by <a href="https://afroz.me" target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--axon-primary)] transition">Afroz Hasan</a>
+          </p>
         </div>
       </div>
     );

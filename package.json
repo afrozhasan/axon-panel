@@ -3,8 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Axon Panel — Ultra-lightweight, high-performance Linux hosting control panel",
-  "author": "Axon Panel Contributors",
+  "description": "Axon Panel — Ultra-lightweight, high-performance Linux hosting control panel by AxonWP (https://axonwp.com), developed by Afroz Hasan (https://afroz.me)",
+  "author": {
+    "name": "Afroz Hasan",
+    "url": "https://afroz.me"
+  },
+  "homepage": "https://axonwp.com",
+  "funding": "https://afroz.me",
   "license": "MIT",
   "repository": {
     "type": "git",

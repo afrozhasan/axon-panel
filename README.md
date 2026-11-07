@@ -1,12 +1,14 @@
 # Axon Panel
 
+### Axon Panel by [AxonWP](https://axonwp.com) • Developed by [Afroz Hasan](https://afroz.me)
+
 [![CI](https://github.com/afrozhasan/axon-panel/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/afrozhasan/axon-panel/actions/workflows/ci.yml)
 [![Security Audit](https://github.com/afrozhasan/axon-panel/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/afrozhasan/axon-panel/actions/workflows/security.yml)
 [![Release Engineering & Distribution](https://github.com/afrozhasan/axon-panel/actions/workflows/release.yml/badge.svg)](https://github.com/afrozhasan/axon-panel/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/afrozhasan/axon-panel)](https://github.com/afrozhasan/axon-panel/releases)
 
-**Axon Panel** is a lightweight, Linux-native hosting control panel engineered for virtual private servers (VPS), multi-stack websites, databases, reverse proxies, automated TLS, and proactive server telemetry. Operating directly on the host with an ultra-lean runtime footprint (~42 MB RAM baseline), it performs reliably even on resource-constrained 1 GB to 2 GB instances without requiring Docker or Kubernetes.
+**Axon Panel** is a lightweight, Linux-native hosting control panel engineered by **[AxonWP](https://axonwp.com)** and developed by **[Afroz Hasan](https://afroz.me)** for virtual private servers (VPS), multi-stack websites, databases, reverse proxies, automated TLS, and proactive server telemetry. Operating directly on the host with an ultra-lean runtime footprint (~42 MB RAM baseline), it performs reliably even on resource-constrained 1 GB to 2 GB instances without requiring Docker or Kubernetes.
 
 ---
 
@@ -165,6 +167,15 @@ sudo /opt/axon-panel/installer/uninstall.sh --purge
 * **Role-Based Access Control (RBAC):** Hierarchical permissions across Super Admin, Server Admin, Reseller, Customer, Developer, and Read-Only roles.
 * **Brute-Force Lockout:** In-memory rate limiting with 15-minute lockouts after 5 consecutive failed attempts.
 * **Audit Logging:** Every administrative action is recorded in the SQLite audit log with actor username, timestamp, and client IP.
+
+---
+
+## 👤 Authors & Credits
+
+* **Organization & Brand:** [AxonWP](https://axonwp.com)
+* **Lead Developer:** [Afroz Hasan](https://afroz.me)
+* **Official Repository:** [https://github.com/afrozhasan/axon-panel](https://github.com/afrozhasan/axon-panel)
+* **Website:** [https://axonwp.com](https://axonwp.com)
 
 ---
 

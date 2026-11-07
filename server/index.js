@@ -214,6 +214,7 @@ server.listen(config.port, config.host, () => {
   const banner = [
     "",
     "  Axon Panel is listening",
+    "  by AxonWP (https://axonwp.com) — Developed by Afroz Hasan (https://afroz.me)",
     `  address      http://${config.host}:${config.port}`,
     `  public URL   https://${config.panelDomain}`,
     `  terminal     ${terminalBackend}`,

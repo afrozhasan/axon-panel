@@ -91,6 +91,16 @@ export default function Login({
         <p className="mt-4 text-center text-[11px] text-slate-600">
           Access is logged. Failed attempts are rate limited and locked out.
         </p>
+
+        <div className="mt-4 pt-3 border-t border-[var(--axon-border)]/40 text-center text-[10px] text-[var(--axon-muted)] leading-relaxed">
+          <p>
+            <a href="https://axonwp.com" target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--axon-text)] hover:text-[var(--axon-primary)] transition">Axon Panel</a> by{" "}
+            <a href="https://axonwp.com" target="_blank" rel="noopener noreferrer" className="text-[var(--axon-primary)] hover:underline font-medium">AxonWP</a>
+          </p>
+          <p className="mt-0.5 text-[9px] opacity-80">
+            Developed by <a href="https://afroz.me" target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--axon-primary)] transition">Afroz Hasan</a>
+          </p>
+        </div>
       </form>
     </div>
   );

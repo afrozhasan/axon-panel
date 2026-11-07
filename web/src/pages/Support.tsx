@@ -111,6 +111,52 @@ export default function Support() {
             </div>
           </Card>
 
+          <Card title="About Axon Panel">
+            <div className="space-y-3 text-xs">
+              <div className="p-3 rounded-lg bg-[var(--axon-input-bg)] border border-[var(--axon-border)] space-y-2">
+                <p className="font-semibold text-[var(--axon-text)] text-sm">Axon Panel</p>
+                <p className="text-[var(--axon-muted)]">
+                  Ultra-lightweight, high-performance Linux hosting control panel.
+                </p>
+                <div className="pt-2 border-t border-[var(--axon-border)]/60 space-y-1.5 text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-[var(--axon-muted)]">Organization:</span>
+                    <a
+                      href="https://axonwp.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-[var(--axon-primary)] hover:underline"
+                    >
+                      AxonWP
+                    </a>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[var(--axon-muted)]">Developer:</span>
+                    <a
+                      href="https://afroz.me"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-[var(--axon-primary)] hover:underline"
+                    >
+                      Afroz Hasan
+                    </a>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[var(--axon-muted)]">Source Code:</span>
+                    <a
+                      href="https://github.com/afrozhasan/axon-panel"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-[var(--axon-primary)] hover:underline"
+                    >
+                      GitHub Repo
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+
           <Card title="Server Telemetry Status">
             <div className="space-y-2 text-xs">
               <div className="flex justify-between py-1 border-b border-[var(--axon-border)]">

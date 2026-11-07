@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Axon Panel — Safe Version Update Engine
+# By AxonWP (https://axonwp.com) — Developed by Afroz Hasan (https://afroz.me)
 # https://github.com/afrozhasan/axon-panel
 # ==============================================================================
 
@@ -100,7 +101,7 @@ cat <<'EOF'
 /_/  |_/_/|_|\____/_/ /_/      /_/    \__,_/_/ /_/\___/_/   
 EOF
 printf '%b\n' "$NC"
-printf '  %bAxon Panel Automated Upgrade Engine%b\n\n' "$BOLD" "$NC"
+printf '  %bAxon Panel by AxonWP (https://axonwp.com) — Upgrade Engine%b\n\n' "$BOLD" "$NC"
 
 # 1. Detect Installed Version
 CURRENT_VERSION="unknown"

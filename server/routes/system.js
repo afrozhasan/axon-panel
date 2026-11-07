@@ -116,6 +116,13 @@ router.get("/overview", async (req, res, next) => {
         postgres: parseClusters(clusters.ok ? clusters.stdout : ""),
       },
       backups: loadConfig().backupDir,
+      about: {
+        name: "Axon Panel",
+        organization: "AxonWP",
+        organizationUrl: "https://axonwp.com",
+        author: "Afroz Hasan",
+        authorUrl: "https://afroz.me",
+      },
       at: new Date().toISOString(),
     };
 

@@ -159,6 +159,11 @@ router.post("/", async (req, res, next) => {
     }
     if (needs.socket || template === "php") {
       vars.socket = body.socket ? String(body.socket) : config.phpFpmSocket;
+      if (vars.socket && (vars.socket.includes("php7.4") || vars.socket.includes("php7.") || vars.socket.includes("php5."))) {
+        return res.status(400).json({
+          error: "PHP 7.4 and older versions are end-of-life and strictly prohibited. Axon Panel requires PHP 8.1 or higher (PHP 8.3 recommended).",
+        });
+      }
     }
     if (template === "redirect") {
       const target = assertDomain(body.target);
@@ -332,6 +337,11 @@ router.post("/:name/switch-php", async (req, res, next) => {
     const { version } = req.body ?? {};
     if (!version || !/^[0-9]+\.[0-9]+$/.test(version)) {
       return res.status(400).json({ error: "Valid PHP version required (e.g. 8.2, 8.3, 8.4)" });
+    }
+    if (parseFloat(version) < 8.1 || version === "7.4" || version.startsWith("7.") || version.startsWith("5.")) {
+      return res.status(400).json({
+        error: "PHP 7.4 and older versions are end-of-life and strictly prohibited. Axon Panel requires PHP 8.1 or higher (PHP 8.3 recommended).",
+      });
     }
 
     const file = path.join(NGINX_AVAILABLE, name);

@@ -11,12 +11,18 @@ type PhpVersion = {
   iniExists: boolean;
   isDefaultCli: boolean;
   activeSitesCount: number;
+  isOlder?: boolean;
+  isForbidden?: boolean;
 };
 
 type PhpData = {
   versions: PhpVersion[];
   availableToInstall: string[];
   defaultCli: string | null;
+  hasOlderInstalled?: boolean;
+  olderInstalled?: string[];
+  hasForbidden?: boolean;
+  isPhp83Installed?: boolean;
 };
 
 type Site = {
@@ -77,6 +83,8 @@ export default function PhpManagement() {
 
   // Install PHP
   const [installingVer, setInstallingVer] = useState<string | null>(null);
+  const [standardizing, setStandardizing] = useState(false);
+  const [removingVer, setRemovingVer] = useState<string | null>(null);
 
   // Switch site version state
   const [switchSite, setSwitchSite] = useState<string>("");
@@ -152,6 +160,46 @@ export default function PhpManagement() {
       await api.post("/php/install", { version: ver });
       await load();
     }, `PHP ${ver} installed successfully`).finally(() => setInstallingVer(null));
+  };
+
+  const handleStandardizePhp83 = () => {
+    if (
+      !window.confirm(
+        "Standardize on PHP 8.3?\n\nThis will:\n1. Install all PHP 8.3 components (FPM, CLI, MySQL, cURL, GD, XML, Zip, BCMath, Intl, OPcache, Redis, SQLite, SOAP)\n2. Migrate any websites on older PHP versions (< 8.3) to PHP 8.3\n3. Remove older PHP packages from the system\n\nProceed?"
+      )
+    ) {
+      return;
+    }
+
+    setStandardizing(true);
+    run(async () => {
+      const res = await api.post<{ ok: boolean; message: string; steps?: string[] }>(
+        "/php/standardize-83",
+        { migrateSites: true, purgeOlder: true }
+      );
+      await load();
+      return res;
+    }, "PHP 8.3 standardized: components installed and older versions removed.").finally(() => setStandardizing(false));
+  };
+
+  const handleRemoveVersion = (ver: string) => {
+    if (ver === "8.3") {
+      toast("error", "Cannot remove primary PHP 8.3 runtime.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Are you sure you want to remove PHP ${ver}?\n\nAny active websites using PHP ${ver} will be safely migrated to PHP 8.3.`
+      )
+    ) {
+      return;
+    }
+
+    setRemovingVer(ver);
+    run(async () => {
+      await api.post("/php/remove", { version: ver, migrateTo: "8.3" });
+      await load();
+    }, `PHP ${ver} removed successfully`).finally(() => setRemovingVer(null));
   };
 
   const handleToggleExtension = async (ext: ExtensionItem) => {
@@ -243,6 +291,32 @@ export default function PhpManagement() {
         </div>
       </div>
 
+      {/* Standardization & Older Version Notice */}
+      {data.hasOlderInstalled && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-lg">⚠️</span>
+                <h3 className="text-sm font-bold text-amber-200">
+                  Older PHP Versions Detected ({data.olderInstalled?.join(", ")})
+                </h3>
+              </div>
+              <p className="mt-1 text-xs text-amber-300/80 max-w-2xl">
+                PHP versions older than 8.3 are deprecated. Standardize your server on PHP 8.3: all production components will be installed, any sites using older versions will be migrated automatically, and older PHP versions will be removed.
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              onClick={handleStandardizePhp83}
+              disabled={busy || standardizing}
+            >
+              {standardizing ? <Spinner /> : "⚡ Standardize on PHP 8.3"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Installed PHP Versions Grid */}
       <div className="grid gap-4 md:grid-cols-3">
         {data.versions.map((v) => (
@@ -260,6 +334,7 @@ export default function PhpManagement() {
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-bold text-slate-100">PHP {v.version}</h3>
                   {v.isDefaultCli && <Badge tone="info">CLI Default</Badge>}
+                  {v.isOlder && <Badge tone="warn">Deprecated</Badge>}
                 </div>
                 <p className="mono text-[11px] text-slate-500 mt-0.5">{v.service}</p>
               </div>
@@ -277,7 +352,7 @@ export default function PhpManagement() {
               </div>
             </div>
 
-            <div className="mt-4 flex gap-1.5 border-t border-[var(--axon-border)] pt-3" onClick={(e) => e.stopPropagation()}>
+            <div className="mt-4 flex flex-wrap gap-1.5 border-t border-[var(--axon-border)] pt-3" onClick={(e) => e.stopPropagation()}>
               <Button
                 variant="secondary"
                 size="sm"
@@ -296,7 +371,7 @@ export default function PhpManagement() {
               </Button>
               {v.status === "active" ? (
                 <Button
-                  variant="danger"
+                  variant="secondary"
                   size="sm"
                   onClick={() => handleServiceAction(v.version, "stop")}
                   disabled={busy}
@@ -311,6 +386,17 @@ export default function PhpManagement() {
                   disabled={busy}
                 >
                   Start
+                </Button>
+              )}
+              {v.version !== "8.3" && (
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => handleRemoveVersion(v.version)}
+                  disabled={busy || removingVer === v.version}
+                  title={`Remove PHP ${v.version} and migrate active sites to PHP 8.3`}
+                >
+                  {removingVer === v.version ? <Spinner /> : "Uninstall"}
                 </Button>
               )}
             </div>
@@ -634,6 +720,27 @@ export default function PhpManagement() {
           )}
         </div>
       )}
+
+      {/* PHP 8.3 Modernization & Maintenance */}
+      <Card
+        title="PHP 8.3 Modernization & Maintenance"
+        subtitle="Ensure PHP 8.3 is fully provisioned with all production components (FPM, CLI, MySQL, cURL, GD, XML, Zip, BCMath, Intl, OPcache, Redis, SQLite, SOAP) and remove older PHP runtimes."
+      >
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="text-xs text-slate-400 space-y-1">
+            <p>• Installs all 17 PHP 8.3 production components and validates FastCGI socket.</p>
+            <p>• Automatically migrates any Nginx websites using PHP &lt; 8.3 to PHP 8.3.</p>
+            <p>• Purges older PHP packages to reclaim memory, disk space, and eliminate vulnerabilities.</p>
+          </div>
+          <Button
+            variant="primary"
+            onClick={handleStandardizePhp83}
+            disabled={busy || standardizing}
+          >
+            {standardizing ? <Spinner /> : "Remove Older PHP & Install PHP 8.3 Components"}
+          </Button>
+        </div>
+      </Card>
 
       {/* Available to Install */}
       {data.availableToInstall.length > 0 && (

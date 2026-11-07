@@ -62,6 +62,8 @@ export const ALLOWED_BINARIES = new Set([
   "apt-get",
   "apt-cache",
   "dpkg",
+  "dpkg-query",
+  "update-alternatives",
   "add-apt-repository",
   "phpenmod",
   "phpdismod",

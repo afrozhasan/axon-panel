@@ -1,14 +1,42 @@
 import { Router } from "express";
-import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, lstatSync } from "node:fs";
 import path from "node:path";
 import { run } from "../lib/exec.js";
 import { testConfig, reloadNginx, NGINX_AVAILABLE } from "../lib/nginx.js";
 import { audit } from "../lib/audit.js";
 import { clientIp } from "../middleware/auth.js";
 import { unitStates } from "../lib/systemd.js";
+import { loadConfig } from "../config.js";
 
 const router = Router();
 const AVAILABLE_VERSIONS = ["8.1", "8.2", "8.3", "8.4"];
+
+export function isForbiddenPhpVersion(version) {
+  if (!version || typeof version !== "string") return true;
+  const trimmed = version.trim();
+  const v = parseFloat(trimmed);
+  return isNaN(v) || v < 8.1 || trimmed === "7.4" || trimmed.startsWith("7.") || trimmed.startsWith("5.");
+}
+
+export const PHP83_COMPONENTS = [
+  "php8.3-fpm",
+  "php8.3-cli",
+  "php8.3-common",
+  "php8.3-mysql",
+  "php8.3-curl",
+  "php8.3-gd",
+  "php8.3-mbstring",
+  "php8.3-xml",
+  "php8.3-zip",
+  "php8.3-bcmath",
+  "php8.3-intl",
+  "php8.3-opcache",
+  "php8.3-readline",
+  "php8.3-sqlite3",
+  "php8.3-redis",
+  "php8.3-bz2",
+  "php8.3-soap",
+];
 
 export const EXTENSION_DEFINITIONS = [
   // Database
@@ -111,6 +139,8 @@ router.get("/", async (_req, res, next) => {
     const versions = installed.map((version) => {
       const sockPath = `/var/run/php/php${version}-fpm.sock`;
       const iniPath = `/etc/php/${version}/fpm/php.ini`;
+      const isOlder = parseFloat(version) < 8.3;
+      const isForbidden = isForbiddenPhpVersion(version);
       return {
         version,
         service: `php${version}-fpm.service`,
@@ -120,13 +150,22 @@ router.get("/", async (_req, res, next) => {
         iniExists: existsSync(iniPath),
         isDefaultCli: defaultCli === version,
         activeSitesCount: countSitesForVersion(version),
+        isOlder,
+        isForbidden,
       };
     });
+
+    const olderInstalled = versions.filter((v) => v.isOlder).map((v) => v.version);
+    const hasForbidden = versions.some((v) => v.isForbidden);
 
     res.json({
       versions,
       availableToInstall: AVAILABLE_VERSIONS.filter((v) => !installed.includes(v)),
       defaultCli,
+      hasOlderInstalled: olderInstalled.length > 0,
+      olderInstalled,
+      hasForbidden,
+      isPhp83Installed: installed.includes("8.3"),
     });
   } catch (error) {
     next(error);
@@ -428,6 +467,12 @@ router.post("/switch-site", async (req, res, next) => {
       return res.status(400).json({ error: "Site name and valid PHP version required" });
     }
 
+    if (isForbiddenPhpVersion(version)) {
+      return res.status(400).json({
+        error: "PHP 7.4 and older versions are end-of-life and strictly prohibited. Axon Panel requires PHP 8.1 or higher (PHP 8.3 recommended).",
+      });
+    }
+
     const siteFile = path.join(NGINX_AVAILABLE, site);
     if (!existsSync(siteFile)) {
       return res.status(404).json({ error: `Site ${site} configuration not found` });
@@ -465,6 +510,11 @@ router.post("/switch-site", async (req, res, next) => {
 router.post("/install", async (req, res, next) => {
   try {
     const { version } = req.body ?? {};
+    if (isForbiddenPhpVersion(version)) {
+      return res.status(400).json({
+        error: "PHP 7.4 and older versions are end-of-life and strictly prohibited. Axon Panel requires PHP 8.1 or higher (PHP 8.3 recommended).",
+      });
+    }
     if (!version || !AVAILABLE_VERSIONS.includes(version)) {
       return res.status(400).json({ error: `Invalid PHP version. Supported: ${AVAILABLE_VERSIONS.join(", ")}` });
     }
@@ -501,6 +551,281 @@ router.post("/install", async (req, res, next) => {
     await run("systemctl", ["enable", "--now", `php${version}-fpm`], { timeout: 30000 });
     audit({ action: "php.install", actor: req.actor?.username, ip: clientIp(req), params: { version }, result: "ok" });
     res.json({ ok: true, message: `PHP ${version} and extensions installed successfully` });
+  } catch (error) {
+    next(error);
+  }
+});
+
+export async function standardizePhp83({ migrateSites = true, purgeOlder = true } = {}) {
+  const steps = [];
+
+  // Step 1: Ensure repository is ready for PHP 8.3
+  const repoRes = await ensurePhpRepository("8.3");
+  if (!repoRes.ok) {
+    throw new Error(`Repository setup failed: ${repoRes.error}`);
+  }
+  steps.push("Ondřej Surý PHP repository verified for PHP 8.3");
+
+  // Step 2: Install PHP 8.3 and all essential production components
+  const installResult = await run(
+    "apt-get",
+    ["install", "-y", "-q", ...PHP83_COMPONENTS],
+    { timeout: 300000, env: { DEBIAN_FRONTEND: "noninteractive" } },
+  );
+  if (!installResult.ok) {
+    throw new Error(`PHP 8.3 installation failed: ${installResult.stderr || installResult.stdout}`);
+  }
+  steps.push("PHP 8.3 runtime and all components installed successfully");
+
+  // Step 3: Enable and start php8.3-fpm
+  await run("systemctl", ["enable", "--now", "php8.3-fpm"], { timeout: 30000 });
+  steps.push("php8.3-fpm.service enabled and started");
+
+  // Step 4: Migrate any Nginx virtual hosts using older PHP versions (< 8.3, including 7.4, 8.0, 8.1, 8.2)
+  const migratedSites = [];
+  if (migrateSites && existsSync(NGINX_AVAILABLE)) {
+    try {
+      const files = readdirSync(NGINX_AVAILABLE);
+      for (const file of files) {
+        const fullPath = path.join(NGINX_AVAILABLE, file);
+        if (!existsSync(fullPath)) continue;
+        try {
+          const stat = lstatSync(fullPath);
+          if (!stat.isFile()) continue;
+        } catch {
+          continue;
+        }
+
+        let content = readFileSync(fullPath, "utf8");
+        const match = content.match(/fastcgi_pass\s+unix:\/var\/run\/php\/php([0-9.]+)-fpm\.sock;/);
+        if (match) {
+          const oldVer = match[1];
+          if (parseFloat(oldVer) < 8.3) {
+            const oldContent = content;
+            content = content.replace(
+              /fastcgi_pass\s+unix:\/var\/run\/php\/php[0-9.]+-fpm\.sock;/g,
+              "fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;",
+            );
+            writeFileSync(fullPath, content, "utf8");
+
+            const check = await testConfig();
+            if (!check.ok) {
+              writeFileSync(fullPath, oldContent, "utf8");
+            } else {
+              migratedSites.push({ site: file, from: oldVer, to: "8.3" });
+            }
+          }
+        }
+      }
+      if (migratedSites.length > 0) {
+        await reloadNginx();
+        steps.push(`Migrated ${migratedSites.length} website(s) to PHP 8.3 FastCGI socket`);
+      }
+    } catch (e) {
+      steps.push(`Site migration note: ${e.message}`);
+    }
+  }
+
+  // Step 5: Identify and remove older PHP versions (< 8.3)
+  const removedVersions = [];
+  const removedPackages = [];
+  if (purgeOlder) {
+    const installed = getInstalledVersions();
+    const older = installed.filter((v) => parseFloat(v) < 8.3);
+
+    for (const ver of older) {
+      // 1. Stop and disable legacy service
+      try {
+        await run("systemctl", ["stop", `php${ver}-fpm`], { timeout: 15000 });
+        await run("systemctl", ["disable", `php${ver}-fpm`], { timeout: 15000 });
+      } catch {}
+
+      // 2. Discover all installed packages for this version
+      const pkgQuery = await run("dpkg-query", ["-W", "-f=${binary:Package}\n", `php${ver}*`]);
+      if (pkgQuery.ok && pkgQuery.stdout) {
+        const pkgs = pkgQuery.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
+        if (pkgs.length > 0) {
+          const rmRes = await run("apt-get", ["remove", "--purge", "-y", "-q", ...pkgs], {
+            timeout: 180000,
+            env: { DEBIAN_FRONTEND: "noninteractive" },
+          });
+          if (rmRes.ok) {
+            removedPackages.push(...pkgs);
+          }
+        }
+      }
+
+      // Clean up /etc/php/<ver> directory if remaining
+      try {
+        const dir = `/etc/php/${ver}`;
+        if (existsSync(dir)) {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      } catch {}
+
+      removedVersions.push(ver);
+    }
+
+    if (removedVersions.length > 0) {
+      // Autoremove dangling unneeded dependencies
+      await run("apt-get", ["autoremove", "-y", "-q"], {
+        timeout: 120000,
+        env: { DEBIAN_FRONTEND: "noninteractive" },
+      });
+      steps.push(`Removed older PHP versions: ${removedVersions.join(", ")}`);
+    } else {
+      steps.push("No older PHP versions (< 8.3) found on the system");
+    }
+  }
+
+  // Step 6: Update default CLI alternatives if available
+  try {
+    if (existsSync("/usr/bin/php8.3")) {
+      await run("update-alternatives", ["--set", "php", "/usr/bin/php8.3"], { timeout: 10000 });
+      steps.push("Set default CLI php to /usr/bin/php8.3");
+    }
+  } catch {}
+
+  return {
+    ok: true,
+    targetVersion: "8.3",
+    installedComponents: PHP83_COMPONENTS,
+    migratedSites,
+    removedVersions,
+    removedPackages,
+    steps,
+  };
+}
+
+router.post("/standardize-83", async (req, res, next) => {
+  try {
+    const { migrateSites = true, purgeOlder = true } = req.body ?? {};
+    const result = await standardizePhp83({ migrateSites, purgeOlder });
+    audit({
+      action: "php.standardize_83",
+      actor: req.actor?.username,
+      ip: clientIp(req),
+      params: { migrateSites, purgeOlder },
+      result: "ok",
+    });
+    res.json({
+      ok: true,
+      message: "Successfully standardized on PHP 8.3, installed all components, and removed older versions.",
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/remove-older", async (req, res, next) => {
+  try {
+    const { migrateSites = true, purgeOlder = true } = req.body ?? {};
+    const result = await standardizePhp83({ migrateSites, purgeOlder });
+    audit({
+      action: "php.remove_older",
+      actor: req.actor?.username,
+      ip: clientIp(req),
+      params: { migrateSites, purgeOlder },
+      result: "ok",
+    });
+    res.json({
+      ok: true,
+      message: "Older PHP versions removed and PHP 8.3 components verified.",
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/remove", async (req, res, next) => {
+  try {
+    const { version, migrateTo = "8.3" } = req.body ?? {};
+    if (!version || !/^[0-9]+\.[0-9]+$/.test(version)) {
+      return res.status(400).json({ error: "Invalid PHP version" });
+    }
+    if (version === "8.3") {
+      return res.status(400).json({ error: "Cannot remove standard PHP 8.3 runtime." });
+    }
+
+    // 1. Migrate sites if any are on this version
+    const migratedSites = [];
+    if (existsSync(NGINX_AVAILABLE)) {
+      const files = readdirSync(NGINX_AVAILABLE);
+      const targetSock = `/var/run/php/php${migrateTo}-fpm.sock`;
+      for (const file of files) {
+        const fullPath = path.join(NGINX_AVAILABLE, file);
+        if (!existsSync(fullPath)) continue;
+        try {
+          if (!lstatSync(fullPath).isFile()) continue;
+        } catch {
+          continue;
+        }
+
+        let content = readFileSync(fullPath, "utf8");
+        if (content.includes(`php${version}-fpm.sock`)) {
+          const oldContent = content;
+          content = content.replace(
+            /fastcgi_pass\s+unix:\/var\/run\/php\/php[0-9.]+-fpm\.sock;/g,
+            `fastcgi_pass unix:${targetSock};`,
+          );
+          writeFileSync(fullPath, content, "utf8");
+          const check = await testConfig();
+          if (!check.ok) {
+            writeFileSync(fullPath, oldContent, "utf8");
+          } else {
+            migratedSites.push({ site: file, from: version, to: migrateTo });
+          }
+        }
+      }
+      if (migratedSites.length > 0) {
+        await reloadNginx();
+      }
+    }
+
+    // 2. Stop and disable service
+    try {
+      await run("systemctl", ["stop", `php${version}-fpm`], { timeout: 15000 });
+      await run("systemctl", ["disable", `php${version}-fpm`], { timeout: 15000 });
+    } catch {}
+
+    // 3. Remove packages
+    const pkgQuery = await run("dpkg-query", ["-W", "-f=${binary:Package}\n", `php${version}*`]);
+    let removedPackages = [];
+    if (pkgQuery.ok && pkgQuery.stdout) {
+      const pkgs = pkgQuery.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
+      if (pkgs.length > 0) {
+        const rmRes = await run("apt-get", ["remove", "--purge", "-y", "-q", ...pkgs], {
+          timeout: 180000,
+          env: { DEBIAN_FRONTEND: "noninteractive" },
+        });
+        if (rmRes.ok) removedPackages = pkgs;
+      }
+    }
+
+    // 4. Clean up /etc/php/<version>
+    try {
+      const dir = `/etc/php/${version}`;
+      if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+    } catch {}
+
+    await run("apt-get", ["autoremove", "-y", "-q"], { timeout: 120000, env: { DEBIAN_FRONTEND: "noninteractive" } });
+
+    audit({
+      action: "php.remove",
+      actor: req.actor?.username,
+      ip: clientIp(req),
+      params: { version, migrateTo, migratedCount: migratedSites.length },
+      result: "ok",
+    });
+
+    res.json({
+      ok: true,
+      message: `PHP ${version} removed successfully`,
+      migratedSites,
+      removedPackages,
+    });
   } catch (error) {
     next(error);
   }

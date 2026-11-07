@@ -3,6 +3,9 @@ name: Release Engineering & Distribution
 on:
   release:
     types: [published]
+  push:
+    tags:
+      - 'v*.*.*'
 
 permissions:
   contents: write
@@ -11,6 +14,9 @@ jobs:
   release:
     name: Prepare & Publish Release Assets
     runs-on: ubuntu-latest
+    env:
+      AXONPANEL_CONFIG_DIR: /tmp/axon-panel-ci
+      AXONPANEL_LOG_DIR: /tmp/axon-panel-ci/logs
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -22,7 +28,7 @@ jobs:
 
       - name: Validate Release Version Tag (SemVer)
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${{ github.event.release.tag_name || github.ref_name }}"
           echo "Validating tag: ${VERSION}"
           if [[ ! "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
             echo "::error::Tag '${VERSION}' does not adhere to Semantic Versioning (vMAJOR.MINOR.PATCH)."
@@ -72,6 +78,8 @@ jobs:
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          name: Axon Panel ${{ env.RELEASE_VERSION }}
           files: |
             install.sh
             axon-panel-${{ env.RELEASE_VERSION }}.tar.gz

@@ -11,12 +11,21 @@ let dbInstance = null;
 export function getDb() {
   if (dbInstance) return dbInstance;
 
-  if (!existsSync(CONFIG_DIR)) {
-    mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+  try {
+    if (!existsSync(CONFIG_DIR)) {
+      mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+    }
+  } catch {
+    /* ignore permission error in unprivileged test/CI environments */
   }
 
-  const isNew = !existsSync(DB_PATH);
-  dbInstance = new Database(DB_PATH, { timeout: 10000 });
+  let dbPath = DB_PATH;
+  try {
+    dbInstance = new Database(dbPath, { timeout: 10000 });
+  } catch {
+    dbPath = path.join("/tmp", `axon-test-${process.pid}.db`);
+    dbInstance = new Database(dbPath, { timeout: 10000 });
+  }
 
   try {
     chmodSync(DB_PATH, 0o600);

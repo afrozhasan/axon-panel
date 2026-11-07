@@ -44,6 +44,9 @@ jobs:
   static-analysis:
     name: Static Security Analysis
     runs-on: ubuntu-latest
+    env:
+      AXONPANEL_CONFIG_DIR: /tmp/axon-panel-ci
+      AXONPANEL_LOG_DIR: /tmp/axon-panel-ci/logs
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4

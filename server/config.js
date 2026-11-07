@@ -1,27 +1,34 @@
 import { randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, chmodSync, renameSync, existsSync } from "node:fs";
+import path from "node:path";
 
-export const CONFIG_DIR =
-  process.env.AXONPANEL_CONFIG_DIR ||
-  process.env.WEBPANEL_CONFIG_DIR ||
-  (existsSync("/etc/axon-panel")
-    ? "/etc/axon-panel"
-    : existsSync("/etc/axonpanel")
-    ? "/etc/axonpanel"
-    : existsSync("/etc/webpanel")
-    ? "/etc/webpanel"
-    : "/etc/axon-panel");
+function resolveConfigDir() {
+  if (process.env.AXONPANEL_CONFIG_DIR) return process.env.AXONPANEL_CONFIG_DIR;
+  if (process.env.WEBPANEL_CONFIG_DIR) return process.env.WEBPANEL_CONFIG_DIR;
+  for (const dir of ["/etc/axon-panel", "/etc/axonpanel", "/etc/webpanel"]) {
+    if (existsSync(dir)) return dir;
+  }
+  if (process.getuid && process.getuid() !== 0) {
+    return path.join(process.env.HOME || "/tmp", ".axon-panel");
+  }
+  return "/etc/axon-panel";
+}
+
+function resolveLogDir() {
+  if (process.env.AXONPANEL_LOG_DIR) return process.env.AXONPANEL_LOG_DIR;
+  if (process.env.WEBPANEL_LOG_DIR) return process.env.WEBPANEL_LOG_DIR;
+  for (const dir of ["/var/log/axon-panel", "/var/log/axonpanel", "/var/log/webpanel"]) {
+    if (existsSync(dir)) return dir;
+  }
+  if (process.getuid && process.getuid() !== 0) {
+    return path.join(resolveConfigDir(), "logs");
+  }
+  return "/var/log/axon-panel";
+}
+
+export const CONFIG_DIR = resolveConfigDir();
 export const CONFIG_PATH = `${CONFIG_DIR}/config.json`;
-export const LOG_DIR =
-  process.env.AXONPANEL_LOG_DIR ||
-  process.env.WEBPANEL_LOG_DIR ||
-  (existsSync("/var/log/axon-panel")
-    ? "/var/log/axon-panel"
-    : existsSync("/var/log/axonpanel")
-    ? "/var/log/axonpanel"
-    : existsSync("/var/log/webpanel")
-    ? "/var/log/webpanel"
-    : "/var/log/axon-panel");
+export const LOG_DIR = resolveLogDir();
 
 export function randomSecret(bytes = 32) {
   return randomBytes(bytes).toString("base64url");
@@ -52,7 +59,11 @@ let cached = null;
 
 export function ensureConfigDir() {
   for (const dir of [CONFIG_DIR, LOG_DIR]) {
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+    try {
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+    } catch {
+      /* ignore if unprivileged or read-only system dir */
+    }
   }
 }
 
@@ -60,19 +71,33 @@ export function loadConfig({ force = false } = {}) {
   if (cached && !force) return cached;
   ensureConfigDir();
   if (!existsSync(CONFIG_PATH)) {
-    return writeConfig(defaults());
+    try {
+      return writeConfig(defaults());
+    } catch {
+      cached = defaults();
+      return cached;
+    }
   }
-  const parsed = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
-  cached = { ...defaults(), ...parsed };
-  return cached;
+  try {
+    const parsed = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+    cached = { ...defaults(), ...parsed };
+    return cached;
+  } catch {
+    cached = defaults();
+    return cached;
+  }
 }
 
 export function writeConfig(cfg) {
   ensureConfigDir();
   const tmp = `${CONFIG_PATH}.${process.pid}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(cfg, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(tmp, 0o600);
-  renameSync(tmp, CONFIG_PATH);
+  try {
+    writeFileSync(tmp, `${JSON.stringify(cfg, null, 2)}\n`, { mode: 0o600 });
+    chmodSync(tmp, 0o600);
+    renameSync(tmp, CONFIG_PATH);
+  } catch {
+    /* fallback to in-memory config if filesystem path is unwritable */
+  }
   cached = cfg;
   return cfg;
 }

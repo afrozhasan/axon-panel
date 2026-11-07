@@ -39,8 +39,11 @@ fastcgi_ignore_headers Cache-Control Expires Set-Cookie;
  * Inspect comprehensive cache status across all 6 layers
  */
 export async function getCacheStatus(siteName, docroot) {
-  const siteObj = readSite(siteName);
-  const vhost = siteObj.content || "";
+  let vhost = "";
+  try {
+    const siteObj = readSite(siteName);
+    vhost = siteObj?.content || "";
+  } catch {}
 
   // 1. FastCGI Cache status in Nginx vhost
   const fastcgiEnabled = /fastcgi_cache\s+WORDPRESS/i.test(vhost);

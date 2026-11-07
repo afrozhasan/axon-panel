@@ -17,6 +17,8 @@ jobs:
     env:
       AXONPANEL_CONFIG_DIR: /tmp/axon-panel-ci
       AXONPANEL_LOG_DIR: /tmp/axon-panel-ci/logs
+      AXONPANEL_NGINX_AVAILABLE: /tmp/axon-panel-ci/sites-available
+      AXONPANEL_NGINX_ENABLED: /tmp/axon-panel-ci/sites-enabled
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4

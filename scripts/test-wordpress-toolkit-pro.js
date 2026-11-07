@@ -4,12 +4,12 @@ import path from "node:path";
 import os from "node:os";
 import { auditSecurity, previewHardening, scanMalwareAndFiles } from "../server/lib/wp/security.js";
 import { getCacheStatus, previewCachePreset } from "../server/lib/wp/cache.js";
+import { NGINX_AVAILABLE } from "../server/lib/nginx.js";
 
 console.log("=== Testing WordPress Toolkit Pro ===");
 
 const TEST_DIR = path.join(os.tmpdir(), `wp-toolkit-test-${Date.now()}`);
 const SITE_NAME = `wp-test-${Date.now()}.example.test`;
-const NGINX_AVAILABLE = "/etc/nginx/sites-available";
 const MOCK_VHOST_FILE = path.join(NGINX_AVAILABLE, SITE_NAME);
 
 function setupMockWp(dir) {
@@ -35,8 +35,8 @@ $wp_version = '6.7.1';
 
 function trySetupMockVhost() {
   try {
-    if (existsSync(NGINX_AVAILABLE)) {
-      writeFileSync(MOCK_VHOST_FILE, `server {
+    mkdirSync(NGINX_AVAILABLE, { recursive: true });
+    writeFileSync(MOCK_VHOST_FILE, `server {
     listen 80;
     server_name ${SITE_NAME};
     root ${TEST_DIR};
@@ -46,8 +46,7 @@ function trySetupMockVhost() {
     }
 }
 `);
-      return true;
-    }
+    return true;
   } catch {
     // If not root or directory doesn't exist, skip vhost file creation
   }

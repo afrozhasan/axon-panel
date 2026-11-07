@@ -13,9 +13,9 @@ import path from "node:path";
 import { run } from "./exec.js";
 import { assertSiteName } from "./validate.js";
 
-export const NGINX_AVAILABLE = "/etc/nginx/sites-available";
-export const NGINX_ENABLED = "/etc/nginx/sites-enabled";
-export const NGINX_BACKUP_DIR = "/etc/nginx/panel-backups";
+export const NGINX_AVAILABLE = process.env.AXONPANEL_NGINX_AVAILABLE || "/etc/nginx/sites-available";
+export const NGINX_ENABLED = process.env.AXONPANEL_NGINX_ENABLED || "/etc/nginx/sites-enabled";
+export const NGINX_BACKUP_DIR = process.env.AXONPANEL_NGINX_BACKUP_DIR || "/etc/nginx/panel-backups";
 
 function safeRead(file) {
   try {

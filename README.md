@@ -1,7 +1,8 @@
 # Axon Panel
 
-[![CI](https://github.com/afrozhasan/axon-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/afrozhasan/axon-panel/actions/workflows/ci.yml)
-[![Security Audit](https://github.com/afrozhasan/axon-panel/actions/workflows/security.yml/badge.svg)](https://github.com/afrozhasan/axon-panel/actions/workflows/security.yml)
+[![CI](https://github.com/afrozhasan/axon-panel/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/afrozhasan/axon-panel/actions/workflows/ci.yml)
+[![Security Audit](https://github.com/afrozhasan/axon-panel/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/afrozhasan/axon-panel/actions/workflows/security.yml)
+[![Release Engineering & Distribution](https://github.com/afrozhasan/axon-panel/actions/workflows/release.yml/badge.svg)](https://github.com/afrozhasan/axon-panel/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/afrozhasan/axon-panel)](https://github.com/afrozhasan/axon-panel/releases)
 

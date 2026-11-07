@@ -4,10 +4,14 @@ import { loadConfig } from "../server/config.js";
 async function testApi() {
   console.log("=== Testing Configurable Roles & Permissions API Endpoints ===");
 
-  // Check if live daemon is running on 127.0.0.1:9090
+  const cfg = loadConfig();
+  const port = cfg.port || 9090;
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  // Check if live daemon is running on baseUrl
   let serverRunning = false;
   try {
-    const probe = await fetch("http://127.0.0.1:9090/api/auth/session", {
+    const probe = await fetch(`${baseUrl}/api/auth/session`, {
       signal: AbortSignal.timeout(1500),
     });
     serverRunning = probe.status > 0;
@@ -21,8 +25,6 @@ async function testApi() {
     return;
   }
 
-  const cfg = loadConfig();
-
   // 1. Sign admin session directly
   const token = signSession({
     id: "usr_admin_test",
@@ -33,7 +35,7 @@ async function testApi() {
   const cookie = `webpanel_token=${token}`;
 
   // 2. Test GET /api/users/roles/permissions
-  const rolesRes = await fetch("http://127.0.0.1:9090/api/users/roles/permissions", {
+  const rolesRes = await fetch(`${baseUrl}/api/users/roles/permissions`, {
     headers: {
       cookie,
       "x-requested-with": "webpanel",
@@ -50,7 +52,7 @@ async function testApi() {
   }
 
   // 3. Test PUT /api/users/roles/permissions/developer
-  const updateRes = await fetch("http://127.0.0.1:9090/api/users/roles/permissions/developer", {
+  const updateRes = await fetch(`${baseUrl}/api/users/roles/permissions/developer`, {
     method: "PUT",
     headers: {
       cookie,
@@ -78,7 +80,7 @@ async function testApi() {
   });
   const customerCookie = `webpanel_token=${customerToken}`;
 
-  const custMetricsRes = await fetch("http://127.0.0.1:9090/api/system/metrics", {
+  const custMetricsRes = await fetch(`${baseUrl}/api/system/metrics`, {
     headers: {
       cookie: customerCookie,
       "x-requested-with": "webpanel",
@@ -90,7 +92,7 @@ async function testApi() {
   }
 
   // 5. Reset developer permissions
-  const resetRes = await fetch("http://127.0.0.1:9090/api/users/roles/permissions/developer/reset", {
+  const resetRes = await fetch(`${baseUrl}/api/users/roles/permissions/developer/reset`, {
     method: "POST",
     headers: {
       cookie,
@@ -100,7 +102,7 @@ async function testApi() {
   console.log("POST reset developer status:", resetRes.status);
 
   // 6. Test GET /api/system/overview
-  const overviewRes = await fetch("http://127.0.0.1:9090/api/system/overview", {
+  const overviewRes = await fetch(`${baseUrl}/api/system/overview`, {
     headers: {
       cookie,
       "x-requested-with": "webpanel",

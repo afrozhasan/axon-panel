@@ -185,7 +185,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq || true
 
 PKGS_TO_INSTALL=()
-for pkg in curl git tar gzip unzip build-essential sqlite3 ca-certificates gnupg; do
+for pkg in curl git tar gzip unzip build-essential sqlite3 ca-certificates gnupg software-properties-common; do
   if ! dpkg -s "$pkg" >/dev/null 2>&1; then
     PKGS_TO_INSTALL+=("$pkg")
   fi
@@ -243,6 +243,51 @@ if [[ "$DO_SSL" == "1" && "$PANEL_DOMAIN" != "localhost" ]]; then
   else
     ok "Certbot is already installed."
   fi
+fi
+
+# Ensure Ondřej Surý PHP repository is registered so multi-PHP versions (8.1 - 8.4) can be installed
+log "Configuring PHP package repository..."
+if [[ "$OS_ID" == "ubuntu" || "$OS_ID" == "pop" || "$OS_ID" == "linuxmint" ]]; then
+  if ! grep -rqs "ondrej/php" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
+    info "Configuring Ondřej Surý PHP PPA (ppa:ondrej/php) for Ubuntu ${VERSION_CODENAME:-}..."
+    if command -v add-apt-repository >/dev/null 2>&1; then
+      LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php || {
+        warn "add-apt-repository failed; using direct Launchpad keyring configuration..."
+        mkdir -p /etc/apt/keyrings
+        curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x14AA40EC0831756756D7F66C4F4EA0AAE5267A6C" | gpg --dearmor -o /etc/apt/keyrings/ondrej-php.gpg --yes || true
+        CODENAME="${VERSION_CODENAME:-$(lsb_release -sc 2>/dev/null || echo noble)}"
+        echo "deb [signed-by=/etc/apt/keyrings/ondrej-php.gpg] https://ppa.launchpadcontent.net/ondrej/php/ubuntu/ ${CODENAME} main" > /etc/apt/sources.list.d/ondrej-php.list
+      }
+    fi
+    apt-get update -qq || true
+    ok "Ondřej Surý PHP PPA configured."
+  else
+    ok "Ondřej Surý PHP repository already present."
+  fi
+elif [[ "$OS_ID" == "debian" ]]; then
+  if ! grep -rqs "packages.sury.org/php" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
+    info "Configuring Ondřej Surý PHP repository for Debian ${VERSION_CODENAME:-}..."
+    apt-get install -y -qq apt-transport-https lsb-release ca-certificates curl || true
+    mkdir -p /etc/apt/trusted.gpg.d
+    curl -sSLo /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg || true
+    CODENAME="${VERSION_CODENAME:-$(lsb_release -sc 2>/dev/null || echo bookworm)}"
+    echo "deb https://packages.sury.org/php/ ${CODENAME} main" > /etc/apt/sources.list.d/php.list
+    apt-get update -qq || true
+    ok "Debian PHP repository configured."
+  else
+    ok "Debian PHP repository already present."
+  fi
+fi
+
+# Ensure baseline PHP-FPM service is available if no PHP is present on the system
+if ! command -v php >/dev/null 2>&1 && ! ls /var/run/php/php*-fpm.sock >/dev/null 2>&1; then
+  info "Installing baseline PHP 8.3 FPM runtime and common extensions..."
+  apt-get install -y -qq php8.3-fpm php8.3-cli php8.3-common php8.3-mysql php8.3-curl php8.3-gd php8.3-mbstring php8.3-xml php8.3-zip php8.3-bcmath php8.3-intl || true
+  systemctl enable php8.3-fpm --quiet || true
+  systemctl start php8.3-fpm || true
+  ok "Baseline PHP 8.3 FPM runtime installed."
+else
+  ok "Existing PHP installation detected; skipping baseline PHP installation."
 fi
 
 # ------------------------------------------------------------------------------

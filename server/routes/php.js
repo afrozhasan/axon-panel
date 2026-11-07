@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { run } from "../lib/exec.js";
 import { testConfig, reloadNginx, NGINX_AVAILABLE } from "../lib/nginx.js";
@@ -255,6 +255,104 @@ router.get("/:version/extensions", async (req, res, next) => {
   }
 });
 
+export async function ensurePhpRepository(version) {
+  // Check if php${version}-fpm package is already indexed in apt cache
+  const check = await run("apt-cache", ["show", `php${version}-fpm`]);
+  if (check.ok && check.stdout.includes(`Package: php${version}-fpm`)) {
+    return { ok: true };
+  }
+
+  // Detect OS details
+  let osId = "ubuntu";
+  let codename = "";
+  if (existsSync("/etc/os-release")) {
+    try {
+      const osRelease = readFileSync("/etc/os-release", "utf8");
+      const idMatch = osRelease.match(/^ID=(.+)$/m);
+      if (idMatch) osId = idMatch[1].replace(/["']/g, "").trim().toLowerCase();
+      const codenameMatch = osRelease.match(/^VERSION_CODENAME=(.+)$/m);
+      if (codenameMatch) codename = codenameMatch[1].replace(/["']/g, "").trim().toLowerCase();
+    } catch {}
+  }
+
+  // Ubuntu and Debian derivatives
+  if (["ubuntu", "pop", "linuxmint"].includes(osId)) {
+    // Check if add-apt-repository exists; if not, install software-properties-common
+    if (!existsSync("/usr/bin/add-apt-repository")) {
+      const spc = await run("apt-get", ["install", "-y", "-q", "software-properties-common"], {
+        timeout: 120000,
+        env: { DEBIAN_FRONTEND: "noninteractive" },
+      });
+      if (!spc.ok) {
+        return {
+          ok: false,
+          error: `Failed to install software-properties-common required for PHP repository setup: ${spc.stderr || spc.stdout}`,
+        };
+      }
+    }
+
+    // Add Ondřej Surý PHP PPA
+    const ppa = await run("add-apt-repository", ["-y", "ppa:ondrej/php"], {
+      timeout: 180000,
+      env: { DEBIAN_FRONTEND: "noninteractive", LC_ALL: "C.UTF-8" },
+    });
+    if (!ppa.ok) {
+      // Direct PPA keyring fallback
+      try {
+        const cname = codename || "noble";
+        const sourcesDir = "/etc/apt/sources.list.d";
+        if (!existsSync(sourcesDir)) mkdirSync(sourcesDir, { recursive: true });
+        writeFileSync(
+          path.join(sourcesDir, "ondrej-php.list"),
+          `deb https://ppa.launchpadcontent.net/ondrej/php/ubuntu/ ${cname} main\n`,
+          "utf8",
+        );
+      } catch (e) {
+        return { ok: false, error: `Failed to configure Ondřej Surý PHP PPA: ${ppa.stderr || e.message}` };
+      }
+    }
+  } else if (osId === "debian") {
+    // Debian: configure packages.sury.org
+    const deps = await run("apt-get", ["install", "-y", "-q", "apt-transport-https", "ca-certificates", "curl"], {
+      timeout: 120000,
+      env: { DEBIAN_FRONTEND: "noninteractive" },
+    });
+    if (!deps.ok) {
+      return { ok: false, error: `Failed to install Debian repository dependencies: ${deps.stderr || deps.stdout}` };
+    }
+
+    const gpgDir = "/etc/apt/trusted.gpg.d";
+    if (!existsSync(gpgDir)) mkdirSync(gpgDir, { recursive: true });
+
+    await run("curl", ["-sSLo", "/etc/apt/trusted.gpg.d/php.gpg", "https://packages.sury.org/php/apt.gpg"], {
+      timeout: 60000,
+    });
+
+    const cname = codename || "bookworm";
+    writeFileSync("/etc/apt/sources.list.d/php.list", `deb https://packages.sury.org/php/ ${cname} main\n`, "utf8");
+  }
+
+  // Refresh apt package lists
+  const updateRes = await run("apt-get", ["update", "-q"], {
+    timeout: 120000,
+    env: { DEBIAN_FRONTEND: "noninteractive" },
+  });
+  if (!updateRes.ok) {
+    return { ok: false, error: `Failed to update package lists after adding PHP repository: ${updateRes.stderr || updateRes.stdout}` };
+  }
+
+  // Final verification that php${version}-fpm is indexed
+  const verify = await run("apt-cache", ["show", `php${version}-fpm`]);
+  if (!verify.ok || !verify.stdout.includes(`Package: php${version}-fpm`)) {
+    return {
+      ok: false,
+      error: `Package php${version}-fpm could not be located in package repositories after adding Ondřej Surý PHP repository.`,
+    };
+  }
+
+  return { ok: true };
+}
+
 router.post("/:version/extensions/toggle", async (req, res, next) => {
   try {
     const { version } = req.params;
@@ -278,6 +376,10 @@ router.post("/:version/extensions/toggle", async (req, res, next) => {
     if (enable) {
       const status = getExtensionStatus(version, def.name, def.pkg);
       if (!status.installed) {
+        const repoCheck = await ensurePhpRepository(version);
+        if (!repoCheck.ok) {
+          return res.status(500).json({ error: `Repository setup failed: ${repoCheck.error}` });
+        }
         const aptRes = await run("apt-get", ["install", "-y", "-q", targetPkg], {
           timeout: 180000,
           env: { DEBIAN_FRONTEND: "noninteractive" },
@@ -367,6 +469,11 @@ router.post("/install", async (req, res, next) => {
       return res.status(400).json({ error: `Invalid PHP version. Supported: ${AVAILABLE_VERSIONS.join(", ")}` });
     }
 
+    const repoCheck = await ensurePhpRepository(version);
+    if (!repoCheck.ok) {
+      return res.status(500).json({ error: `Repository setup failed: ${repoCheck.error}` });
+    }
+
     const packages = [
       `php${version}-fpm`,
       `php${version}-cli`,
@@ -388,7 +495,7 @@ router.post("/install", async (req, res, next) => {
     );
 
     if (!installResult.ok) {
-      return res.status(500).json({ error: `Installation failed: ${installResult.stderr}` });
+      return res.status(500).json({ error: `Installation failed: ${installResult.stderr || installResult.stdout}` });
     }
 
     await run("systemctl", ["enable", "--now", `php${version}-fpm`], { timeout: 30000 });

@@ -54,12 +54,11 @@ jobs:
           DIST_DIR="/tmp/${PKG_NAME}"
           mkdir -p "${DIST_DIR}"
 
-          # Stage release files (include server, compiled dist, package.json, scripts, installer, docs)
+          # Stage release files (include server, compiled dist, web source, package.json, scripts, installer, docs)
           rsync -av \
             --exclude 'node_modules' \
             --exclude '.git' \
             --exclude '.github' \
-            --exclude 'web/src' \
             --exclude '*.db*' \
             --exclude '*.log' \
             --exclude 'backups' \

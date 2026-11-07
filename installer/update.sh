@@ -222,9 +222,21 @@ if [[ $UPDATE_SUCCESS -eq 0 ]]; then
     mkdir -p "${STAGING_DIR}/extracted"
     tar -xzf "$TARBALL_FILE" -C "${STAGING_DIR}/extracted"
 
+    SRC_EXTRACTED=""
+    if [[ -f "${STAGING_DIR}/extracted/package.json" ]]; then
+      SRC_EXTRACTED="${STAGING_DIR}/extracted"
+    else
+      NESTED_DIR=$(find "${STAGING_DIR}/extracted" -mindepth 1 -maxdepth 2 -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
+      if [[ -n "$NESTED_DIR" && -f "${NESTED_DIR}/package.json" ]]; then
+        SRC_EXTRACTED="$NESTED_DIR"
+      fi
+    fi
+
+    [[ -n "$SRC_EXTRACTED" ]] || fail "Archive extraction failed: Could not locate package.json in downloaded release package."
+
     # Copy files into PANEL_DIR, preserving uploads and runtime files
     mkdir -p "$PANEL_DIR"
-    cp -a "${STAGING_DIR}/extracted"/. "${PANEL_DIR}/"
+    cp -a "${SRC_EXTRACTED}"/. "${PANEL_DIR}/"
     ok "Application files updated in ${PANEL_DIR}."
     UPDATE_SUCCESS=1
   else
@@ -232,13 +244,33 @@ if [[ $UPDATE_SUCCESS -eq 0 ]]; then
     SOURCE_URL="https://github.com/${GITHUB_REPO}/archive/refs/tags/${TARGET_VERSION}.tar.gz"
     if curl -fsSL --max-time 60 "$SOURCE_URL" -o "$TARBALL_FILE"; then
       mkdir -p "${STAGING_DIR}/extracted"
-      tar -xzf "$TARBALL_FILE" -C "${STAGING_DIR}/extracted" --strip-components=1
-      cp -a "${STAGING_DIR}/extracted"/. "${PANEL_DIR}/"
+      tar -xzf "$TARBALL_FILE" -C "${STAGING_DIR}/extracted"
+      SRC_EXTRACTED=""
+      if [[ -f "${STAGING_DIR}/extracted/package.json" ]]; then
+        SRC_EXTRACTED="${STAGING_DIR}/extracted"
+      else
+        NESTED_DIR=$(find "${STAGING_DIR}/extracted" -mindepth 1 -maxdepth 2 -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
+        if [[ -n "$NESTED_DIR" && -f "${NESTED_DIR}/package.json" ]]; then
+          SRC_EXTRACTED="$NESTED_DIR"
+        fi
+      fi
+      [[ -n "$SRC_EXTRACTED" ]] || fail "Could not locate package.json in source archive."
+      cp -a "${SRC_EXTRACTED}"/. "${PANEL_DIR}/"
       ok "Source archive updated in ${PANEL_DIR}."
       UPDATE_SUCCESS=1
     else
       fail "Could not download release assets for ${TARGET_VERSION}."
     fi
+  fi
+fi
+
+# Normalize PANEL_DIR directory structure if needed
+if [[ ! -f "${PANEL_DIR}/package.json" ]]; then
+  NESTED_PKG=$(find "$PANEL_DIR" -mindepth 1 -maxdepth 2 -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
+  if [[ -n "$NESTED_PKG" && -f "${NESTED_PKG}/package.json" && -d "${NESTED_PKG}/server" ]]; then
+    info "Normalizing nested directory structure from ${NESTED_PKG} into ${PANEL_DIR}..."
+    cp -a "${NESTED_PKG}"/. "${PANEL_DIR}/"
+    rm -rf "${NESTED_PKG}"
   fi
 fi
 

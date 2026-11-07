@@ -28,9 +28,9 @@ fail() { printf '%berror:%b %s\n' "$RED" "$NC" "$*" >&2; exit 1; }
 GITHUB_REPO="afrozhasan/axon-panel"
 DEFAULT_INSTALL_DIR="/opt/axon-panel"
 SERVICE_NAME="axon-panel"
-CONFIG_DIR="/etc/axon-panel"
-LOG_DIR="/var/log/axon-panel"
-BACKUP_DIR="/var/backups/axon-panel"
+CONFIG_DIR="${AXONPANEL_CONFIG_DIR:-/etc/axon-panel}"
+LOG_DIR="${AXONPANEL_LOG_DIR:-/var/log/axon-panel}"
+BACKUP_DIR="${AXONPANEL_BACKUP_DIR:-/var/backups/axon-panel}"
 
 # Default installer parameters
 PANEL_DOMAIN=""
@@ -130,10 +130,15 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")"
 PARENT_DIR="$(cd "${SCRIPT_DIR}/.." 2>/dev/null && pwd || echo "")"
 
+LOCAL_REPO_DIR=""
+if [[ -f "${SCRIPT_DIR}/package.json" && -d "${SCRIPT_DIR}/server" ]]; then
+  LOCAL_REPO_DIR="${SCRIPT_DIR}"
+elif [[ -f "${PARENT_DIR}/package.json" && -d "${PARENT_DIR}/server" ]]; then
+  LOCAL_REPO_DIR="${PARENT_DIR}"
+fi
+
 if [[ -n "$TARGET_DIR" ]]; then
   INSTALL_DIR="$TARGET_DIR"
-elif [[ -n "$PARENT_DIR" && -f "$PARENT_DIR/package.json" ]]; then
-  INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 else
   INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 fi
@@ -177,7 +182,7 @@ fi
 log "Validating and installing required system packages..."
 
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
+apt-get update -qq || true
 
 PKGS_TO_INSTALL=()
 for pkg in curl git tar gzip unzip build-essential sqlite3 ca-certificates gnupg; do
@@ -205,14 +210,14 @@ else
   ok "Nginx web server is already installed."
 fi
 
-# Ensure Node.js 20+ is installed
+# Ensure Node.js 22+ is installed
 NODE_NEEDS_INSTALL=0
 if ! command -v node >/dev/null 2>&1; then
   NODE_NEEDS_INSTALL=1
 else
   NODE_MAJOR=$(node -v | tr -d 'v' | cut -d'.' -f1)
-  if [[ "$NODE_MAJOR" -lt 20 ]]; then
-    info "Installed Node.js is v${NODE_MAJOR}. Axon Panel requires Node.js 20 or higher."
+  if [[ "$NODE_MAJOR" -lt 22 ]]; then
+    info "Installed Node.js is v${NODE_MAJOR}. Axon Panel requires Node.js 22 or higher."
     NODE_NEEDS_INSTALL=1
   fi
 fi
@@ -222,7 +227,7 @@ if [[ $NODE_NEEDS_INSTALL -eq 1 ]]; then
   mkdir -p /etc/apt/keyrings
   curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg --yes
   echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
-  apt-get update -qq
+  apt-get update -qq || true
   apt-get install -y -qq nodejs
   ok "Node.js $(node -v) and npm $(npm -v) installed."
 else
@@ -247,12 +252,18 @@ log "Deploying Axon Panel application into ${INSTALL_DIR}..."
 
 mkdir -p "$INSTALL_DIR"
 
-if [[ -f "${PARENT_DIR}/package.json" && -d "${PARENT_DIR}/server" ]]; then
-  # Local source tree available
-  info "Installing from local source repository at ${PARENT_DIR}..."
-  mkdir -p "$INSTALL_DIR"
-  cp -a "${PARENT_DIR}"/. "${INSTALL_DIR}/"
-  ok "Source files staged into ${INSTALL_DIR}."
+if [[ -n "$LOCAL_REPO_DIR" && -f "${LOCAL_REPO_DIR}/package.json" && -d "${LOCAL_REPO_DIR}/server" ]]; then
+  if [[ "$LOCAL_REPO_DIR" != "$INSTALL_DIR" ]]; then
+    info "Installing from local source repository at ${LOCAL_REPO_DIR}..."
+    if command -v rsync >/dev/null 2>&1; then
+      rsync -a --exclude 'node_modules' --exclude '.git' --exclude '*.db*' --exclude '*.log' "${LOCAL_REPO_DIR}/" "${INSTALL_DIR}/"
+    else
+      cp -a "${LOCAL_REPO_DIR}"/. "${INSTALL_DIR}/"
+    fi
+    ok "Source files staged into ${INSTALL_DIR}."
+  else
+    info "Deploying in-place within ${INSTALL_DIR}."
+  fi
 else
   # Standalone installer via curl: Fetch release package from GitHub
   info "Retrieving distribution assets from GitHub releases..."
@@ -267,6 +278,8 @@ else
   info "Deploying Axon Panel release ${VERSION_TAG}..."
 
   TMP_RELEASE_DIR=$(mktemp -d "/tmp/axon-install-XXXXXX")
+  EXTRACT_STAGING="${TMP_RELEASE_DIR}/extracted"
+  mkdir -p "$EXTRACT_STAGING"
   trap 'rm -rf "${TMP_RELEASE_DIR}"' EXIT
 
   TARBALL_URL="https://github.com/${GITHUB_REPO}/releases/download/${VERSION_TAG}/axon-panel-${VERSION_TAG}.tar.gz"
@@ -280,35 +293,216 @@ else
         ok "Package checksum verified."
       fi
     fi
-    tar -xzf "$TARBALL_FILE" -C "$INSTALL_DIR"
+    tar -xzf "$TARBALL_FILE" -C "$EXTRACT_STAGING"
   else
-    # Fallback to source archive
+    # Fallback to GitHub source archive
     SOURCE_URL="https://github.com/${GITHUB_REPO}/archive/refs/tags/${VERSION_TAG}.tar.gz"
     info "Release tarball unavailable; downloading source archive from ${SOURCE_URL}..."
-    curl -fsSL --max-time 60 "$SOURCE_URL" -o "$TARBALL_FILE"
-    tar -xzf "$TARBALL_FILE" -C "$INSTALL_DIR" --strip-components=1
+    if curl -fsSL --max-time 60 "$SOURCE_URL" -o "$TARBALL_FILE"; then
+      tar -xzf "$TARBALL_FILE" -C "$EXTRACT_STAGING"
+    else
+      fail "Could not download Axon Panel release assets or source archive from GitHub."
+    fi
   fi
+
+  # Locate extracted application directory (handles nested directories such as axon-panel-v1.0.0/)
+  SRC_EXTRACTED=""
+  if [[ -f "${EXTRACT_STAGING}/package.json" ]]; then
+    SRC_EXTRACTED="${EXTRACT_STAGING}"
+  else
+    NESTED_DIR=$(find "$EXTRACT_STAGING" -mindepth 1 -maxdepth 2 -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
+    if [[ -n "$NESTED_DIR" && -f "${NESTED_DIR}/package.json" ]]; then
+      SRC_EXTRACTED="$NESTED_DIR"
+    fi
+  fi
+
+  [[ -n "$SRC_EXTRACTED" ]] || fail "Archive extraction failed: Could not locate package.json in downloaded release package."
+
+  info "Staging release files into ${INSTALL_DIR}..."
+  mkdir -p "$INSTALL_DIR"
+  cp -a "${SRC_EXTRACTED}"/. "${INSTALL_DIR}/"
 
   rm -rf "$TMP_RELEASE_DIR"
   trap - EXIT
-  ok "Axon Panel release ${VERSION_TAG} extracted."
+  ok "Axon Panel release ${VERSION_TAG} staged into ${INSTALL_DIR}."
 fi
+
+# Normalize directory structure: ensure INSTALL_DIR contains package.json directly
+if [[ ! -f "${INSTALL_DIR}/package.json" ]]; then
+  NESTED_PKG=$(find "$INSTALL_DIR" -mindepth 1 -maxdepth 2 -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
+  if [[ -n "$NESTED_PKG" && -f "${NESTED_PKG}/package.json" && -d "${NESTED_PKG}/server" ]]; then
+    info "Normalizing nested directory structure from ${NESTED_PKG} into ${INSTALL_DIR}..."
+    cp -a "${NESTED_PKG}"/. "${INSTALL_DIR}/"
+    rm -rf "${NESTED_PKG}"
+  fi
+fi
+
+# Verify source completeness and required files
+for req in "package.json" "server/index.js" "systemd/axon-panel.service"; do
+  if [[ ! -f "${INSTALL_DIR}/${req}" ]]; then
+    fail "Required application file missing: ${INSTALL_DIR}/${req}. Installation aborted."
+  fi
+done
+ok "Source completeness and required application files verified."
 
 # ------------------------------------------------------------------------------
 # 6. APPLICATION DEPENDENCIES & FRONTEND PRODUCTION BUILD
 # ------------------------------------------------------------------------------
-log "Installing Node.js dependencies and compiling assets..."
-cd "$INSTALL_DIR"
+log "Configuring application runtime, dependencies, and frontend build..."
 
-if [[ -f "${INSTALL_DIR}/dist/index.html" ]]; then
-  info "Pre-compiled distribution bundle detected."
-  npm install --omit=dev --no-audit --no-fund --quiet
-  ok "Production dependencies installed."
+# Step 1: Detect actual application root
+APP_ROOT="$INSTALL_DIR"
+if [[ ! -f "${APP_ROOT}/package.json" ]]; then
+  CANDIDATE=$(find "$INSTALL_DIR" -maxdepth 2 -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
+  if [[ -n "$CANDIDATE" && -f "${CANDIDATE}/package.json" ]]; then
+    APP_ROOT="$CANDIDATE"
+  fi
+fi
+
+if [[ ! -f "${APP_ROOT}/package.json" ]]; then
+  fail "Cannot locate application package.json in ${INSTALL_DIR} or its subdirectories."
+fi
+info "Application root identified: ${APP_ROOT}"
+
+# Step 2: Determine frontend application directory
+FRONTEND_DIR=""
+if [[ -f "${APP_ROOT}/web/package.json" ]] && grep -q '"build":' "${APP_ROOT}/web/package.json"; then
+  FRONTEND_DIR="${APP_ROOT}/web"
+elif [[ -f "${APP_ROOT}/frontend/package.json" ]] && grep -q '"build":' "${APP_ROOT}/frontend/package.json"; then
+  FRONTEND_DIR="${APP_ROOT}/frontend"
+elif [[ -f "${APP_ROOT}/client/package.json" ]] && grep -q '"build":' "${APP_ROOT}/client/package.json"; then
+  FRONTEND_DIR="${APP_ROOT}/client"
+elif [[ -f "${APP_ROOT}/package.json" ]] && grep -q '"build":' "${APP_ROOT}/package.json"; then
+  FRONTEND_DIR="${APP_ROOT}"
 else
-  info "Building production interface from source..."
-  npm install --include=dev --no-audit --no-fund --quiet
-  NODE_ENV=production npm run build
-  ok "Frontend bundle built successfully."
+  FRONTEND_DIR="${APP_ROOT}"
+fi
+info "Frontend application directory identified: ${FRONTEND_DIR}"
+
+# Step 3: Validate package manager and lockfile
+PKG_MANAGER="npm"
+if [[ -f "${APP_ROOT}/pnpm-lock.yaml" || -f "${FRONTEND_DIR}/pnpm-lock.yaml" ]]; then
+  PKG_MANAGER="pnpm"
+elif [[ -f "${APP_ROOT}/yarn.lock" || -f "${FRONTEND_DIR}/yarn.lock" ]]; then
+  PKG_MANAGER="yarn"
+elif [[ -f "${APP_ROOT}/package-lock.json" || -f "${FRONTEND_DIR}/package-lock.json" ]]; then
+  PKG_MANAGER="npm"
+fi
+
+if ! command -v "$PKG_MANAGER" >/dev/null 2>&1; then
+  if [[ "$PKG_MANAGER" == "npm" ]]; then
+    fail "Package manager 'npm' is not installed. Node.js/npm installation is required."
+  elif [[ "$PKG_MANAGER" == "pnpm" ]]; then
+    info "Installing pnpm globally via npm..."
+    npm install -g pnpm || fail "Failed to install pnpm."
+  elif [[ "$PKG_MANAGER" == "yarn" ]]; then
+    info "Installing yarn globally via npm..."
+    npm install -g yarn || fail "Failed to install yarn."
+  fi
+fi
+ok "Package manager validated: ${PKG_MANAGER}"
+
+# Step 4: Install dependencies using the appropriate package manager
+log "Installing dependencies using ${PKG_MANAGER}..."
+cd "$APP_ROOT"
+
+INSTALL_EXIT_CODE=0
+if [[ "$PKG_MANAGER" == "npm" ]]; then
+  npm install --include=dev --no-audit --no-fund || INSTALL_EXIT_CODE=$?
+elif [[ "$PKG_MANAGER" == "pnpm" ]]; then
+  pnpm install --no-frozen-lockfile || INSTALL_EXIT_CODE=$?
+elif [[ "$PKG_MANAGER" == "yarn" ]]; then
+  yarn install || INSTALL_EXIT_CODE=$?
+fi
+
+if [[ $INSTALL_EXIT_CODE -ne 0 ]]; then
+  fail "Dependency installation failed in ${APP_ROOT} with exit code ${INSTALL_EXIT_CODE}."
+fi
+ok "Application dependencies installed successfully."
+
+# If frontend is in a separate directory with its own package.json, install its dependencies
+if [[ "$FRONTEND_DIR" != "$APP_ROOT" && -f "${FRONTEND_DIR}/package.json" ]]; then
+  log "Installing frontend dependencies in ${FRONTEND_DIR}..."
+  cd "$FRONTEND_DIR"
+  if [[ "$PKG_MANAGER" == "npm" ]]; then
+    npm install --include=dev --no-audit --no-fund || fail "Frontend dependency installation failed in ${FRONTEND_DIR}."
+  elif [[ "$PKG_MANAGER" == "pnpm" ]]; then
+    pnpm install --no-frozen-lockfile || fail "Frontend pnpm install failed in ${FRONTEND_DIR}."
+  elif [[ "$PKG_MANAGER" == "yarn" ]]; then
+    yarn install || fail "Frontend yarn install failed in ${FRONTEND_DIR}."
+  fi
+  ok "Frontend dependencies installed."
+fi
+
+# Step 5: Execute actual production build script (Do not invent build command; do not skip frontend build)
+log "Compiling production frontend interface from source..."
+cd "$FRONTEND_DIR"
+
+HAS_BUILD_SCRIPT=$(node -e '
+  try {
+    const pkg = JSON.parse(require("fs").readFileSync("package.json", "utf8"));
+    if (pkg.scripts && typeof pkg.scripts.build === "string" && pkg.scripts.build.trim().length > 0) {
+      console.log("yes");
+    } else {
+      console.log("no");
+    }
+  } catch(e) {
+    console.log("no");
+  }
+')
+
+if [[ "$HAS_BUILD_SCRIPT" != "yes" ]]; then
+  fail "No 'build' script defined in ${FRONTEND_DIR}/package.json. Cannot execute production frontend build."
+fi
+
+# Step 6: Run build and check exit code
+BUILD_EXIT_CODE=0
+if [[ "$PKG_MANAGER" == "npm" ]]; then
+  NODE_ENV=production npm run build || BUILD_EXIT_CODE=$?
+elif [[ "$PKG_MANAGER" == "pnpm" ]]; then
+  NODE_ENV=production pnpm run build || BUILD_EXIT_CODE=$?
+elif [[ "$PKG_MANAGER" == "yarn" ]]; then
+  NODE_ENV=production yarn build || BUILD_EXIT_CODE=$?
+fi
+
+if [[ $BUILD_EXIT_CODE -ne 0 ]]; then
+  fail "Production frontend build failed with exit code ${BUILD_EXIT_CODE} in ${FRONTEND_DIR}. Check compiler error logs above."
+fi
+
+# Step 7: Verify that expected build artifacts exist
+DIST_LOCATIONS=(
+  "${INSTALL_DIR}/dist"
+  "${FRONTEND_DIR}/dist"
+  "${APP_ROOT}/dist"
+)
+
+FOUND_DIST=""
+for d in "${DIST_LOCATIONS[@]}"; do
+  if [[ -f "${d}/index.html" && -s "${d}/index.html" ]]; then
+    FOUND_DIST="$d"
+    break
+  fi
+done
+
+if [[ -z "$FOUND_DIST" ]]; then
+  fail "Production build completed with exit code 0, but expected build artifact ('dist/index.html') is missing or empty."
+fi
+
+# Align distribution bundle to ${INSTALL_DIR}/dist for backend server
+if [[ "$FOUND_DIST" != "${INSTALL_DIR}/dist" ]]; then
+  info "Synchronizing build artifacts from ${FOUND_DIST} to ${INSTALL_DIR}/dist..."
+  mkdir -p "${INSTALL_DIR}/dist"
+  cp -a "${FOUND_DIST}"/. "${INSTALL_DIR}/dist/"
+fi
+
+if [[ ! -f "${INSTALL_DIR}/dist/index.html" || ! -s "${INSTALL_DIR}/dist/index.html" ]]; then
+  fail "Build artifact verification failed: ${INSTALL_DIR}/dist/index.html does not exist or is 0 bytes."
+fi
+ok "Frontend production bundle compiled and verified: ${INSTALL_DIR}/dist/index.html"
+
+# Prune development dependencies to keep the runtime baseline lean (~42 MB RAM)
+if [[ "$PKG_MANAGER" == "npm" ]]; then
+  npm prune --omit=dev --no-audit --no-fund --quiet || true
 fi
 
 # ------------------------------------------------------------------------------
